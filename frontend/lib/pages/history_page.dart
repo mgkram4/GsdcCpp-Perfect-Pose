@@ -206,7 +206,7 @@ class _HistoryPageState extends State<HistoryPage> {
             mainAxisAlignment: MainAxisAlignment.start,
             children: [
               Text(
-                "Form score: ${score.toStringAsFixed(1)}/100",
+                "Form score: ${score.toStringAsFixed(0)}/100",
                 style: TextStyle(fontSize: fontSizeScore),
               ),
             ],
