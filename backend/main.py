@@ -46,6 +46,14 @@ def analyze_pose(category):
     
     return jsonify({"error": "Invalid request"}), 400
 
+@app.route('/analyze_pose', methods=['POST'])
+def analyze_pose_endpoint():
+    category = request.form.get('category')
+    pose_name = request.form.get('pose_name')
+    if not category or not pose_name:
+        return jsonify({"error": "Category and pose_name are required"}), 400
+    return analyze_pose(category, pose_name)
+
 @app.route('/analyze_pose_yoga', methods=['POST'])
 def analyze_yoga():
     return analyze_pose('yoga')
