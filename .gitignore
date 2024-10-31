@@ -1,1 +1,10 @@
 firebase.json
+# Ignore macOS system files
+.DS_Store
+
+# Ignore Python cache files
+__pycache__/
+*.pyc
+
+# Ignore virtual environment folder
+backend/venv/
