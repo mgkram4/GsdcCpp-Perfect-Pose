@@ -50,7 +50,7 @@ class bottom_bar extends StatelessWidget {
           case 2:
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) => const StatsPage()),
+              MaterialPageRoute(builder: (context) => StatsPage()),
             );
             break;
           case 3:

@@ -1,261 +1,337 @@
-import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:perfect_pose/widgets/top_app_bar.dart';
-import 'package:perfect_pose/widgets/bottom_bar.dart';
+import 'package:flutter/material.dart';
 
 class StatsPage extends StatelessWidget {
-  const StatsPage({Key? key}) : super(key: key);
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+
+  StatsPage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final List<FlSpot> spots = [
-      const FlSpot(0, 30), const FlSpot(1, 45), const FlSpot(2, 50), const FlSpot(3, 55), const FlSpot(4, 60),
-      const FlSpot(5, 65), const FlSpot(6, 70), const FlSpot(7, 75), const FlSpot(8, 80), const FlSpot(9, 85),
-      const FlSpot(10, 90), const FlSpot(11, 95), const FlSpot(12, 100), const FlSpot(13, 95), const FlSpot(14, 90),
-    ];
-
     return Scaffold(
-      appBar: top_app_bar(centerText: 'Stats', onSettingsTap: () {}),
-      body: SingleChildScrollView(
+      appBar: AppBar(
+        title: Text('Analyze Shot'),
+        actions: [
+          IconButton(
+            icon: Icon(Icons.home),
+            onPressed: () {
+              Navigator.of(context).pushReplacementNamed('/home');
+            },
+            tooltip: 'Go back to homepage',
+          ),
+        ],
+        flexibleSpace: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Colors.amber, Colors.purple],
+            ),
+          ),
+        ),
+      ),
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: _firestore
+            .collection('users')
+            .doc(_auth.currentUser!.uid)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return Center(child: CircularProgressIndicator());
+          }
+
+          if (snapshot.hasError) {
+            return Center(child: Text('Error: ${snapshot.error}'));
+          }
+
+          if (!snapshot.hasData || !snapshot.data!.exists) {
+            return Center(child: Text('No user data available'));
+          }
+
+          final userData = snapshot.data!.data() as Map<String, dynamic>;
+          final totalShots = userData['postCount'] ?? 0;
+          final perfectForms = userData['perfectFormCount'] ?? 0;
+          final currentStreak = userData['currentStreak'] ?? 0;
+          final highestStreak = userData['highestStreak'] ?? 0;
+
+          // Calculate average similarity
+          final shots = userData['shots'] as List<dynamic>? ?? [];
+          double averageSimilarity = 0;
+          if (shots.isNotEmpty) {
+            double totalSimilarity = 0;
+            int validShots = 0;
+            for (var shot in shots) {
+              final similarityScore =
+                  shot['analysisResult']?['similarity_score'];
+              if (similarityScore != null) {
+                totalSimilarity += (similarityScore as num).toDouble();
+                validShots++;
+              }
+            }
+            averageSimilarity = totalSimilarity / shots.length;
+          }
+
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Lifetime Stats',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.purple[800],
+                  ),
+                ),
+                SizedBox(height: 16),
+                _buildStatCards(totalShots, perfectForms, averageSimilarity,
+                    currentStreak, highestStreak),
+                SizedBox(height: 24),
+                _buildChartCard(
+                  'Shot Forms Distribution',
+                  _buildPieChart(perfectForms, totalShots - perfectForms),
+                ),
+                SizedBox(height: 24),
+                _buildChartCard(
+                  'Streak Comparison',
+                  _buildBarChart(currentStreak, highestStreak),
+                ),
+                SizedBox(height: 24),
+                _buildChartCard(
+                  'Recent Shot Similarity Trend',
+                  _buildLineChart(shots.reversed.take(10).toList()),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildStatCards(int totalShots, int perfectForms,
+      double averageSimilarity, int currentStreak, int highestStreak) {
+    return GridView.count(
+      crossAxisCount: 2,
+      crossAxisSpacing: 10,
+      mainAxisSpacing: 10,
+      shrinkWrap: true,
+      physics: NeverScrollableScrollPhysics(),
+      children: [
+        _buildStatCard('Total Shots', totalShots, Icons.sports_basketball),
+        _buildStatCard('Perfect Forms', perfectForms, Icons.thumb_up),
+        _buildStatCard(
+            'Avg Similarity',
+            '${(averageSimilarity * 100).toStringAsFixed(2)}%',
+            Icons.equalizer),
+        _buildStatCard('Current Streak', currentStreak, Icons.whatshot),
+        _buildStatCard('Highest Streak', highestStreak, Icons.emoji_events),
+      ],
+    );
+  }
+
+  Widget _buildStatCard(String label, dynamic value, IconData icon) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(16),
         child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Stats boxes
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  StatsBox(
-                    boxColor: Colors.blue[400],
-                    firstIcon: Icons.add_chart_sharp,
-                    secondLine: '85%',
-                    thirdLine: 'Average',
-                    fourthLine: 'Form Score'
-                  ),
-                  StatsBox(
-                    boxColor: Colors.green[400],
-                    firstIcon: Icons.token,
-                    secondLine: '12',
-                    thirdLine: 'Perfect Form',
-                    fourthLine: 'Streaks'
-                  ),
-                ],
+            Icon(icon, color: Colors.amber, size: 40),
+            SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: Colors.purple[800],
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 20.0),
-            // Weekly Progress Chart
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.5),
-                      spreadRadius: 2,
-                      blurRadius: 5,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                height: 280,
-                width: double.infinity,
-                child: Column(
-                  children: [
-                    const SizedBox(height: 10),
-                    const Align(
-                      alignment: Alignment(-0.75, 0),
-                      child: Text('Weekly Progress', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                    ),
-                    const SizedBox(height: 10.0),
-                    SizedBox(
-                      height: 216,
-                      child: SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: SizedBox(
-                          width: 800,
-                          child: LineChart(
-                            LineChartData(
-                              gridData: const FlGridData(show: false),
-                              titlesData: FlTitlesData(
-                                bottomTitles: AxisTitles(
-                                  axisNameWidget: const Text(
-                                    'Date',
-                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                                  ),
-                                  sideTitles: SideTitles(
-                                    showTitles: true,
-                                    getTitlesWidget: (value, meta) {
-                                      const style = TextStyle(fontSize: 10, color: Colors.black);
-                                      String text = '';
-                                      if (value.toInt() % 2 == 0) {
-                                        text = '${value.toInt() + 1}/08';
-                                      }
-                                      return SideTitleWidget(
-                                        axisSide: meta.axisSide,
-                                        child: Text(text, style: style),
-                                      );
-                                    },
-                                    reservedSize: 30,
-                                  ),
-                                ),
-                                leftTitles: AxisTitles(
-                                  axisNameWidget: const Text(
-                                    'Form Scores',
-                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                                  ),
-                                  sideTitles: SideTitles(
-                                    showTitles: true,
-                                    getTitlesWidget: (value, meta) {
-                                      const style = TextStyle(fontSize: 10, color: Colors.black);
-                                      String text = '${value.toInt()}%';
-                                      return SideTitleWidget(
-                                        axisSide: meta.axisSide,
-                                        child: Text(text, style: style),
-                                      );
-                                    },
-                                    reservedSize: 40,
-                                  ),
-                                ),
-                                topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                                rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                              ),
-                              borderData: FlBorderData(
-                                show: true,
-                                border: Border.all(color: Colors.grey, width: 2)
-                              ),
-                              minX: 0,
-                              maxX: 14,
-                              minY: 0,
-                              maxY: 100,
-                              lineBarsData: [
-                                LineChartBarData(
-                                  spots: spots,
-                                  isCurved: true,
-                                  color: Colors.blue,
-                                  barWidth: 3,
-                                  isStrokeCapRound: true,
-                                  dotData: const FlDotData(show: true),
-                                  belowBarData: BarAreaData(show: false),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+            SizedBox(height: 4),
+            Text(
+              value is int ? '$value' : value.toString(),
+              style: TextStyle(
+                color: Colors.purple[600],
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 20.0),
-            // Weekly Challenges
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.grey[200],
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.grey.withOpacity(0.5),
-                      spreadRadius: 2,
-                      blurRadius: 5,
-                      offset: const Offset(0, 3),
-                    ),
-                  ],
-                ),
-                height: 150,
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(horizontal: 24.0),
-                child: const Column(
-                  children: [
-                    SizedBox(height: 10),
-                    Align(
-                      alignment: Alignment.topLeft,
-                      child: Text('Weekly Challenges', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-                    ),
-                    SizedBox(height: 10),
-                    TextInWC(firstField: 'Newly Pose', secondField: '37'),
-                    SizedBox(height: 10),
-                    TextInWC(firstField: 'Highest Daily Streak', secondField: '108'),
-                    SizedBox(height: 10),
-                    TextInWC(firstField: 'Perfect Practice', secondField: '40'),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 20.0),
           ],
         ),
       ),
-      bottomNavigationBar: const bottom_bar(),
     );
   }
-}
 
-class StatsBox extends StatelessWidget {
-  final Color? boxColor;
-  final IconData? firstIcon;
-  final String secondLine;
-  final String thirdLine;
-  final String fourthLine;
-  
-  const StatsBox({
-    Key? key,
-    required this.boxColor,
-    required this.firstIcon,
-    required this.secondLine,
-    required this.thirdLine,
-    required this.fourthLine,
-  }) : super(key: key);
+  Widget _buildChartCard(String title, Widget chart) {
+    return Card(
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.purple[800],
+              ),
+            ),
+            SizedBox(height: 16),
+            SizedBox(height: 200, child: chart),
+          ],
+        ),
+      ),
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: boxColor,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.grey.withOpacity(0.5),
-            spreadRadius: 2,
-            blurRadius: 5,
-            offset: const Offset(0, 3),
+  Widget _buildPieChart(int perfectForms, int otherForms) {
+    return PieChart(
+      PieChartData(
+        sections: [
+          PieChartSectionData(
+            color: Colors.green,
+            value: perfectForms.toDouble(),
+            title: '${perfectForms}',
+            radius: 50,
+            titleStyle: TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+          PieChartSectionData(
+            color: Colors.red,
+            value: otherForms.toDouble(),
+            title: '${otherForms}',
+            radius: 50,
+            titleStyle: TextStyle(
+                color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+        ],
+        sectionsSpace: 0,
+        centerSpaceRadius: 40,
+        startDegreeOffset: -90,
+      ),
+    );
+  }
+
+  Widget _buildBarChart(int currentStreak, int highestStreak) {
+    return BarChart(
+      BarChartData(
+        alignment: BarChartAlignment.spaceAround,
+        maxY: (highestStreak + 1).toDouble(),
+        barTouchData: BarTouchData(enabled: false),
+        titlesData: FlTitlesData(
+          show: true,
+          bottomTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                String text = '';
+                switch (value.toInt()) {
+                  case 0:
+                    text = 'Current';
+                    break;
+                  case 1:
+                    text = 'Highest';
+                    break;
+                }
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Text(text,
+                      style: TextStyle(
+                          color: Colors.purple[600],
+                          fontWeight: FontWeight.bold)),
+                );
+              },
+            ),
+          ),
+          leftTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        gridData: FlGridData(show: false),
+        borderData: FlBorderData(show: false),
+        barGroups: [
+          BarChartGroupData(
+            x: 0,
+            barRods: [
+              BarChartRodData(
+                toY: currentStreak.toDouble(),
+                color: Colors.blue,
+                width: 40,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(6)),
+              )
+            ],
+          ),
+          BarChartGroupData(
+            x: 1,
+            barRods: [
+              BarChartRodData(
+                toY: highestStreak.toDouble(),
+                color: Colors.purple,
+                width: 40,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(6)),
+              )
+            ],
           ),
         ],
       ),
-      padding: const EdgeInsets.all(16.0),
-      height: 180,
-      width: 180,
-      child: Column(
-        children: [
-          Icon(firstIcon, size: 55),
-          const SizedBox(height: 5),
-          Text(secondLine, style: const TextStyle(fontSize: 25, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 5),
-          Text(thirdLine, style: const TextStyle(fontSize: 16)),
-          Text(fourthLine, style: const TextStyle(fontSize: 16)),
-        ],
-      ),
     );
   }
-}
 
-class TextInWC extends StatelessWidget {
-  final String firstField;
-  final String secondField;
-  const TextInWC({Key? key, required this.firstField, required this.secondField}) : super(key: key);
+  Widget _buildLineChart(List<dynamic> recentShots) {
+    List<FlSpot> spots = [];
+    for (int i = 0; i < recentShots.length; i++) {
+      final similarityScore =
+          recentShots[i]['analysisResult']?['similarity_score'];
+      if (similarityScore != null) {
+        spots.add(FlSpot(i.toDouble(), (similarityScore as num).toDouble()));
+      }
+    }
 
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(firstField, style: const TextStyle(fontSize: 16)),
-        Text(secondField, style: const TextStyle(color: Colors.green, fontSize: 16))
-      ],
+    return LineChart(
+      LineChartData(
+        gridData: FlGridData(show: false),
+        titlesData: FlTitlesData(
+          bottomTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          leftTitles: AxisTitles(
+            sideTitles: SideTitles(
+              showTitles: true,
+              getTitlesWidget: (value, meta) {
+                return Text('${(value * 100).toInt()}%',
+                    style: TextStyle(color: Colors.purple[600], fontSize: 12));
+              },
+              reservedSize: 40,
+            ),
+          ),
+          topTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          rightTitles: AxisTitles(sideTitles: SideTitles(showTitles: false)),
+        ),
+        borderData: FlBorderData(show: false),
+        minX: 0,
+        maxX: (recentShots.length - 1).toDouble(),
+        minY: 0,
+        maxY: 1,
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            color: Colors.amber,
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: FlDotData(show: true),
+            belowBarData:
+                BarAreaData(show: true, color: Colors.amber.withOpacity(0.2)),
+          ),
+        ],
+      ),
     );
   }
 }
