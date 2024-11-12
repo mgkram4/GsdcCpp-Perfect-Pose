@@ -42,7 +42,7 @@ class MainApp extends StatelessWidget {
         history: (context) => const HistoryPage(),
         post: (context) => const PostPage(),
         challenge: (context) => const ChallengesPage(),
-        profile: (context) => const ProfilePage(),
+        profile: (context) => ProfilePage(),
       },
       home: const AuthWrapper(),
     );
